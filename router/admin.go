@@ -3,11 +3,14 @@ package router
 import (
 	"github.com/kataras/iris/v12"
 	"iris_dev/app/controller/admin"
+	"iris_dev/app/middleware"
 )
 
 //后台路由
 func adminRouter(r *iris.Application)*iris.Application{
 	adminGroup := r.Party("/admin")
+	adminGroup.Post("/login",admin.Login).Name = "后台登录"
+	adminGroup.Use(middleware.AdminAuth) //后台用户鉴权中间件
 	{
 		article := adminGroup.Party("/article")
 		{
