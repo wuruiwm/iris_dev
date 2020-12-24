@@ -9,6 +9,8 @@ import (
 func HttpInit(){
 	//实例化iris
 	app := iris.New()
+	//注册模板路径
+	app.RegisterView(iris.HTML("./app/view",".html"))
 	//路由设置
 	app = router(app)
 	//启动服务
