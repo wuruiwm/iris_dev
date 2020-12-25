@@ -1,10 +1,12 @@
 package websocket
 
 import (
+	"errors"
 	gorillaWs "github.com/gorilla/websocket"
 	"github.com/kataras/iris/v12/websocket"
 	"github.com/kataras/neffos"
 	"github.com/kataras/neffos/gorilla"
+	"iris_dev/app/model"
 	"log"
 	"net/http"
 	"time"
@@ -34,17 +36,21 @@ func Chat()*neffos.Server{
 func onMessage()func(nsConn *websocket.NSConn, msg websocket.Message) error{
 	return func(nsConn *websocket.NSConn, msg websocket.Message) error {
 		log.Printf("Server got: %s from [%s]", msg.Body, nsConn.Conn.ID())
-		ping := string(msg.Body)
+		id := nsConn.Conn.Get("id")//获取聊天室id
+		idInt,ok := id.(int)
+		if !ok{
+			return errors.New("获取聊天室id失败")
+		}
+		content := string(msg.Body)
 		//将消息存入mysql
-		
-		pong := ping
+		_ = model.ChatRoomMessageSave(idInt,content)
+		//发送的消息体
 		data := websocket.Message{
-			Body:[]byte(pong),
+			Body:[]byte(content),
 			IsNative:true,
 		}
 		nsConn.Conn.Write(data)
-		id := nsConn.Conn.Get("id")
-		//获取
+		//获取所有连接
 		connList := nsConn.Conn.Server().GetConnections()
 		for k,v := range connList{
 			//不推送消息给自己
