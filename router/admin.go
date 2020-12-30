@@ -24,6 +24,7 @@ func adminRouter(r *iris.Application)*iris.Application{
 		chat := adminGroup.Party("/chat")
 		{
 			chat.Get("/",admin.ChatIndex).Name = "聊天室模板页"
+			chat.Post("/send",admin.TestSendMessage).Name = "测试其他接口发送消息"
 			chat.Get("/ws/:id",websocket.Handler(ws.Chat())).Name = "聊天室websocket"
 		}
 	}
