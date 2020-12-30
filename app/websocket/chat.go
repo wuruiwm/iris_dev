@@ -12,8 +12,10 @@ import (
 	"sync"
 	"time"
 )
-var mutex sync.Mutex
-var chatClientList = make(map[string]*Client)
+var mutex sync.Mutex //对chatClientList操作时 上锁
+var chatClientList = make(map[string]*Client) //客户端连接集合
+var handleClientListNum = 0 //因为map的delete不会真正的释放内存 所以在操作一定次数后 重新初始化一次map 释放内存
+var initClientListNum = 10000 //多少次以后 重新初始化map 释放内存
 
 type Client struct {
 	ChatRoomId int
@@ -53,7 +55,7 @@ func onMessage()func(nsConn *websocket.NSConn, msg websocket.Message) error{
 		//将消息存入mysql
 		_ = model.ChatRoomMessageSave(client.ChatRoomId,content)
 		//发送消息
-		SendMessage(nsConn.Conn,content)
+		client.SendMessage(content)
 		//获取所有连接
 		for k,v := range chatClientList{
 			//不推送消息给自己
@@ -64,7 +66,7 @@ func onMessage()func(nsConn *websocket.NSConn, msg websocket.Message) error{
 			if v.ChatRoomId != client.ChatRoomId{
 				continue
 			}
-			SendMessage(v.Conn,content)
+			v.SendMessage(content)
 		}
 		return nil
 	}
@@ -120,16 +122,26 @@ func deleteChatClient(c *websocket.Conn){
 	mutex.Lock()
 	defer mutex.Unlock()
 	delete(chatClientList,c.ID())
+	handleClientListNum++
+	if handleClientListNum < initClientListNum{
+		return
+	}
+	handleClientListNum = 0
+	var mapTmp = make(map[string]*Client)
+	for k,v := range chatClientList{
+		mapTmp[k] = v
+	}
+	chatClientList = mapTmp
 }
 
 func GetChatClientList()map[string]*Client{
 	return chatClientList
 }
 
-func SendMessage(c *websocket.Conn,content string){
+func (client *Client)SendMessage(content string){
 	data := websocket.Message{
 		Body:[]byte(content),
 		IsNative:true,
 	}
-	c.Write(data)
+	client.Conn.Write(data)
 }

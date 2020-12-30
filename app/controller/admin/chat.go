@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"iris_dev/app/response"
 	"iris_dev/app/websocket"
@@ -20,9 +19,8 @@ func TestSendMessage(c iris.Context){
 	}
 	chatClientList := websocket.GetChatClientList()
 	for _,v := range chatClientList{
-		fmt.Println(v.ConnId)
 		if v.ChatRoomId == chatRoomId{
-			websocket.SendMessage(v.Conn,msg)
+			v.SendMessage(msg)
 		}
 	}
 	response.Success(c,"发送成功",nil)
