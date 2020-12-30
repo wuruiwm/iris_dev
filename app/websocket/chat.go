@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 )
+
 var mutex sync.Mutex //对chatClientList操作时 上锁
 var chatClientList = make(map[string]*Client) //客户端连接集合
 var handleClientListNum = 0 //因为map的delete不会真正的释放内存 所以在操作一定次数后 重新初始化一次map 释放内存
@@ -33,68 +34,60 @@ var wsUpgrade = gorilla.Upgrader(gorillaWs.Upgrader{
 func Chat()*neffos.Server{
 	ws := websocket.New(wsUpgrade, websocket.Events{
 		//收到消息时
-		websocket.OnNativeMessage: onMessage(),
+		websocket.OnNativeMessage: onMessage,
 	})
 	//连接时
-	ws.OnConnect = onConnect()
+	ws.OnConnect = onConnect
 	//关闭连接时
-	ws.OnDisconnect = onDisConnect()
+	ws.OnDisconnect = onDisConnect
 	//升级到websocket协议失败时
-	ws.OnUpgradeError = onUpgradeError()
+	ws.OnUpgradeError = onUpgradeError
 	return ws
 }
 
-func onMessage()func(nsConn *websocket.NSConn, msg websocket.Message) error{
-	return func(nsConn *websocket.NSConn, msg websocket.Message) error {
-		log.Printf("Server got: %s from [%s]", msg.Body, nsConn.Conn.ID())
-		content := string(msg.Body)
-		client,ok := chatClientList[nsConn.Conn.ID()]//获取聊天室id
-		if !ok{
-			return errors.New("获取当前连接失败")
+func onMessage(nsConn *websocket.NSConn, msg websocket.Message)error{
+	log.Printf("Server got: %s from [%s]", msg.Body, nsConn.Conn.ID())
+	content := string(msg.Body)
+	client,ok := chatClientList[nsConn.Conn.ID()]//获取聊天室id
+	if !ok{
+		return errors.New("获取当前连接失败")
+	}
+	//将消息存入mysql
+	_ = model.ChatRoomMessageSave(client.ChatRoomId,content)
+	//发送消息
+	client.SendMessage(content)
+	//获取所有连接
+	for k,v := range chatClientList{
+		//不推送消息给自己
+		if k == client.ConnId{
+			continue
 		}
-		//将消息存入mysql
-		_ = model.ChatRoomMessageSave(client.ChatRoomId,content)
-		//发送消息
-		client.SendMessage(content)
-		//获取所有连接
-		for k,v := range chatClientList{
-			//不推送消息给自己
-			if k == client.ConnId{
-				continue
-			}
-			//只推送给同聊天室的客户端
-			if v.ChatRoomId != client.ChatRoomId{
-				continue
-			}
-			v.SendMessage(content)
+		//只推送给同聊天室的客户端
+		if v.ChatRoomId != client.ChatRoomId{
+			continue
 		}
-		return nil
+		v.SendMessage(content)
 	}
+	return nil
 }
 
-func onUpgradeError()func(err error){
-	return func(err error) {
-		log.Printf("Upgrade Error: %v", err)
-	}
+func onUpgradeError(err error){
+	log.Printf("Upgrade Error: %v", err)
 }
 
-func onDisConnect()func(conn *websocket.Conn){
-	return func(c *websocket.Conn) {
-		deleteChatClient(c)//删除客户端连接
-		log.Printf("[%s] Disconnected from server", c.ID())
-	}
+func onDisConnect(c *websocket.Conn){
+	deleteChatClient(c)//删除客户端连接
+	log.Printf("[%s] Disconnected from server", c.ID())
 }
 
-func onConnect()func(conn *websocket.Conn)error{
-	return func(c *websocket.Conn) error {
-		//心跳包
-		go heartbeat(c)
-		ctx := websocket.GetContext(c)//获取content
-		id := ctx.Params().GetIntDefault("id",0)//获取聊天室id
-		addChatClient(c,id)//保存客户端连接
-		log.Printf("[%s] Connected to server!", c.ID())
-		return nil
-	}
+func onConnect(c *websocket.Conn)error{
+	//心跳包
+	go heartbeat(c)
+	ctx := websocket.GetContext(c)//获取content
+	id := ctx.Params().GetIntDefault("id",0)//获取聊天室id
+	addChatClient(c,id)//保存客户端连接
+	log.Printf("[%s] Connected to server!", c.ID())
+	return nil
 }
 
 func heartbeat(c *websocket.Conn){
