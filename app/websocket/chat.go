@@ -82,21 +82,26 @@ func onDisConnect(c *websocket.Conn){
 
 func onConnect(c *websocket.Conn)error{
 	//心跳包
-	go heartbeat(c)
 	ctx := websocket.GetContext(c)//获取content
 	id := ctx.Params().GetIntDefault("id",0)//获取聊天室id
+	if id == 0{
+		log.Println("获取聊天室id失败")
+		c.Close()
+		return nil
+	}
 	addChatClient(c,id)//保存客户端连接
 	log.Printf("[%s] Connected to server!", c.ID())
 	return nil
 }
 
-func heartbeat(c *websocket.Conn){
+func (client *Client)heartbeat(){
 	for{
 		time.Sleep(time.Second*5)
-		c.Write(websocket.Message{
-			Body:[]byte("heartbeat"),
-			IsNative:true,
-		})
+		if client.Conn.IsClosed() {
+			break
+		}
+		log.Println("heartbeat")
+		client.SendMessage("heartbeat")
 	}
 }
 
@@ -106,6 +111,7 @@ func addChatClient(c *websocket.Conn,chatRoomId int){
 		ConnId:c.ID(),
 		ChatRoomId:chatRoomId,
 	}
+	go client.heartbeat()
 	mutex.Lock()
 	defer mutex.Unlock()
 	chatClientList[c.ID()] = client
